@@ -746,7 +746,7 @@ def test_easemytrip_bbs_ndls_1a_mobweb():
             print(f"\n⚠️  'Refresh Availability' button not found — continuing")
         page.wait_for_timeout(3000)
 
-        # ── 20. Wallets → More e-Wallets → Bajaj Pay → Make Payment ─────────
+        # ── 20. Wallets → More e-Wallets → PhonePe → Make Payment ─────────
         page.wait_for_load_state("domcontentloaded", timeout=60000)
         page.wait_for_timeout(8000)
         page.screenshot(path="emt2_before_wallet.png")
@@ -787,11 +787,11 @@ def test_easemytrip_bbs_ndls_1a_mobweb():
         page.screenshot(path="emt2_more_wallets.png")
         print(f"   Screenshot saved: emt2_more_wallets.png")
 
-        # Step 3: Select Bajaj Pay radio button (original working logic)
+        # Step 3: Select PhonePe radio button
         page.wait_for_timeout(2000)
         selected = page.evaluate("""
             () => {
-                const radio = document.querySelector('[id="rdoBajaj Pay"]');
+                const radio = document.querySelector('[id="rdoPhonePe"]');
                 if (!radio) return false;
                 radio.checked = true;
                 radio.dispatchEvent(new Event('change', { bubbles: true }));
@@ -803,19 +803,19 @@ def test_easemytrip_bbs_ndls_1a_mobweb():
         if not selected:
             for frame in all_frames:
                 try:
-                    found = frame.evaluate("() => !!document.querySelector('[id=\"rdoBajaj Pay\"]')")
+                    found = frame.evaluate("() => !!document.querySelector('[id=\"rdoPhonePe\"]')")
                     if found:
-                        frame.evaluate("document.querySelector('[id=\"rdoBajaj Pay\"]').scrollIntoView({behavior:'smooth', block:'center'})")
+                        frame.evaluate("document.querySelector('[id=\"rdoPhonePe\"]').scrollIntoView({behavior:'smooth', block:'center'})")
                         page.wait_for_timeout(500)
-                        frame.locator('[id="rdoBajaj Pay"]').click(force=True)
+                        frame.locator('[id="rdoPhonePe"]').click(force=True)
                         selected = True
                         break
                 except Exception:
                     pass
         page.wait_for_timeout(3000)
-        page.screenshot(path="emt2_bajaj_pay.png")
-        print(f"\n✅ 'Bajaj Pay' radio selected successfully")
-        print(f"   Screenshot saved: emt2_bajaj_pay.png")
+        page.screenshot(path="emt2_phonepe.png")
+        print(f"\n✅ 'PhonePe' radio selected successfully")
+        print(f"   Screenshot saved: emt2_phonepe.png")
 
         # Step 4: Click "Make Payment" — target first VISIBLE a.con_btn_pynw (paytm button)
         # Debug showed 3 buttons: only the 2nd one (ng-click="RedirectToHotelsGateway('paytm')") is visible
@@ -935,79 +935,89 @@ def test_easemytrip_bbs_ndls_1a_mobweb():
         except Exception as e:
             print(f"\n⚠️  Amount verification error: {e}")
 
-        # Try clicking #cancelTxn via JS evaluate (bypasses visibility=False restriction)
+        # ── Click cross button (id="cancel-payment") on payment page ────────────
         cancel1_clicked = False
         for attempt in range(15):
             all_frames = [page.main_frame] + [f for f in page.frames if f != page.main_frame]
             for frame in all_frames:
                 try:
-                    # Try JS click first (most reliable for cross-origin/hidden elements)
                     result = frame.evaluate("""
                         () => {
-                            const btn = document.getElementById('cancelTxn');
+                            const btn = document.getElementById('cancel-payment');
                             if (btn) { btn.click(); return true; }
                             return false;
                         }
                     """)
                     if result:
                         cancel1_clicked = True
-                        print(f"\n✅ First 'Cancel' clicked via JS (id='cancelTxn', frame: {frame.url[:60]})")
+                        print(f"\n✅ Cross button clicked via JS (id='cancel-payment', frame: {frame.url[:60]})")
                         break
                 except Exception:
                     pass
                 try:
-                    # Fallback: Playwright locator with force
-                    btn = frame.locator('#cancelTxn')
+                    btn = frame.locator('#cancel-payment')
                     if btn.count() > 0:
                         btn.first.click(force=True)
                         cancel1_clicked = True
-                        print(f"\n✅ First 'Cancel' clicked via locator (id='cancelTxn', frame: {frame.url[:60]})")
+                        print(f"\n✅ Cross button clicked via locator (id='cancel-payment', frame: {frame.url[:60]})")
                         break
                 except Exception:
                     pass
             if cancel1_clicked:
                 break
             page.wait_for_timeout(2000)
-            print(f"   Attempt {attempt+1}: #cancelTxn not found yet, retrying...")
+            print(f"   Attempt {attempt+1}: #cancel-payment not found yet, retrying...")
 
         if not cancel1_clicked:
-            page.screenshot(path="emt2_cancelTxn_notfound.png")
-            print(f"\n⚠️  #cancelTxn not found after all attempts")
-            print(f"   Screenshot saved: emt2_cancelTxn_notfound.png")
+            page.screenshot(path="emt2_cancel_payment_notfound.png")
+            print(f"\n⚠️  #cancel-payment not found after all attempts")
+            print(f"   Screenshot saved: emt2_cancel_payment_notfound.png")
 
         page.wait_for_timeout(2000)
         page.screenshot(path="emt2_cancel_payment.png")
-        print(f"\n✅ First 'Cancel' handled successfully")
+        print(f"\n✅ Cross button (cancel-payment) handled successfully")
         print(f"   URL: {page.url}")
         print(f"   Screenshot saved: emt2_cancel_payment.png")
 
-        # ── Click second "Cancel" (id="cancel_transaction" confirmation dialog) ─
-        # Wait up to 20s for #cancel_transaction to appear
-        cancel2_clicked = False
+        # ── Click "Yes, cancel" confirmation button (id="yes-cancel-button") ───
+        yes_cancel_clicked = False
         for _ in range(10):
             all_frames2 = [page.main_frame] + [f for f in page.frames if f != page.main_frame]
             for frame in all_frames2:
                 try:
-                    btn = frame.locator('#cancel_transaction')
-                    if btn.count() > 0 and btn.first.is_visible():
-                        btn.first.scroll_into_view_if_needed()
-                        btn.first.click(force=True)
-                        cancel2_clicked = True
-                        print(f"\n✅ Second 'Cancel' clicked successfully (id='cancel_transaction', frame: {frame.url[:60]})")
+                    result = frame.evaluate("""
+                        () => {
+                            const btn = document.getElementById('yes-cancel-button');
+                            if (btn) { btn.click(); return true; }
+                            return false;
+                        }
+                    """)
+                    if result:
+                        yes_cancel_clicked = True
+                        print(f"\n✅ 'Yes, cancel' clicked via JS (id='yes-cancel-button', frame: {frame.url[:60]})")
                         break
                 except Exception:
                     pass
-            if cancel2_clicked:
+                try:
+                    btn = frame.locator('#yes-cancel-button')
+                    if btn.count() > 0:
+                        btn.first.click(force=True)
+                        yes_cancel_clicked = True
+                        print(f"\n✅ 'Yes, cancel' clicked via locator (id='yes-cancel-button', frame: {frame.url[:60]})")
+                        break
+                except Exception:
+                    pass
+            if yes_cancel_clicked:
                 break
             page.wait_for_timeout(2000)
 
-        if not cancel2_clicked:
-            print(f"\n⚠️  #cancel_transaction not found — continuing")
+        if not yes_cancel_clicked:
+            print(f"\n⚠️  'Yes, cancel' button (id='yes-cancel-button') not found — continuing")
 
         page.wait_for_load_state("domcontentloaded", timeout=30000)
         page.wait_for_timeout(3000)
         page.screenshot(path="emt2_cancel_confirm.png")
-        print(f"\n✅ Second 'Cancel' handled successfully")
+        print(f"\n✅ 'Yes, cancel' handled successfully")
         print(f"   URL: {page.url}")
         print(f"   Screenshot saved: emt2_cancel_confirm.png")
 
